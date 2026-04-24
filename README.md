@@ -1,10 +1,10 @@
-# 🧩 Advanced Block Game (Unity)
+# 🧩 Match-3 Tile System Prototype (Unity)
 
 A Unity-based puzzle prototype focused on **grid-based mechanics**, **match systems**, and **interactive gameplay elements**.
 
 ---
 
-## 🎮 Gameplay Showcase
+## 🎥 Demo
 
 🧩 Match-3 / Tile System Showcase
 
@@ -40,17 +40,6 @@ Core gameplay loop in action (selection → match → clear).
 <img width="750" alt="image" src="https://github.com/user-attachments/assets/c53d6da9-eedc-4344-b43b-101294ab338e" />
 
 Example of grid layout and level structure.
-
-## 🧠 Project Overview
-
-This project is a prototype designed to explore:
-
-- Match-based puzzle mechanics  
-- Grid system architecture  
-- Player interaction and feedback loops  
-- Modular and scalable gameplay systems  
-
-It serves as a foundation for more advanced puzzle systems such as **Zen Match / Royal Match-style mechanics**.
 
 ---
 
