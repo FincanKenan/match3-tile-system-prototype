@@ -8,6 +8,8 @@ A Unity-based puzzle prototype focused on **grid-based mechanics**, **match syst
 
 🧩 Match-3 / Tile System Showcase
 
+Core interaction loop: select tile → move to tray → match 3 → clear.
+
 <img width="800" height="450" alt="2026-04-2420-41-21-ezgif com-optimize" src="https://github.com/user-attachments/assets/21f84a3f-d3f8-435e-8992-6137ac951606" />
 
 A system-focused prototype demonstrating tile stacking, selection, and matching mechanics inspired by industry-standard puzzle systems.
