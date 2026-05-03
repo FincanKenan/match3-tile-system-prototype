@@ -46,6 +46,9 @@ namespace ZenMatch.Data
         [Tooltip("Bu point baþlangýçta kapalý mý gelsin?")]
         public bool startsLocked = false;
 
+        [Tooltip("Bu point tamamen temizlenince 1 kilitli tray slotu açar.")]
+        public bool unlocksTraySlotOnComplete = false;
+
         [Tooltip("Bu point'in açýlmasý için tamamen bitmesi gereken point id listesi.")]
         public List<string> requiredCompletedPointIds = new();
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -18,6 +19,7 @@ namespace ZenMatch.Runtime
             public readonly StackVisibilityMode VisibilityMode;
             public readonly StackOpenDirection OpenDirection;
             public readonly bool StartsLocked;
+            public readonly bool UnlocksTraySlotOnComplete;
             public readonly List<string> RequiredCompletedPointIds;
             public readonly int MinStackHeight;
             public readonly int MaxStackHeight;
@@ -30,6 +32,7 @@ namespace ZenMatch.Runtime
                 StackVisibilityMode visibilityMode,
                 StackOpenDirection openDirection,
                 bool startsLocked,
+                bool unlocksTraySlotOnComplete,
                 List<string> requiredCompletedPointIds,
                 int minStackHeight,
                 int maxStackHeight,
@@ -41,6 +44,7 @@ namespace ZenMatch.Runtime
                 VisibilityMode = visibilityMode;
                 OpenDirection = openDirection;
                 StartsLocked = startsLocked;
+                UnlocksTraySlotOnComplete = unlocksTraySlotOnComplete;
                 RequiredCompletedPointIds = requiredCompletedPointIds;
                 MinStackHeight = minStackHeight;
                 MaxStackHeight = maxStackHeight;
@@ -65,6 +69,29 @@ namespace ZenMatch.Runtime
         [SerializeField] private int baseSortingOrder = 10;
         [SerializeField] private int sortingOrderStepPerRenderPriority = 100;
 
+        [Header("Tray Slot Reward Visual")]
+        [SerializeField] private Sprite traySlotRewardSprite;
+        [SerializeField] private Color traySlotRewardColor = new Color(1f, 1f, 1f, 0.35f);
+        [SerializeField] private float traySlotRewardScale = 1.35f;
+        [SerializeField] private Vector3 traySlotRewardOffset = Vector3.zero;
+        [SerializeField] private int traySlotRewardSortingOffset = -1;
+
+        [Header("Tray Slot Reward Break Effect")]
+        [SerializeField] private Sprite traySlotBreakSprite;
+        [SerializeField] private Color traySlotBreakColor = new Color(1f, 0.95f, 0.75f, 0.95f);
+        [SerializeField] private float traySlotBreakDuration = 0.55f;
+        [SerializeField] private float traySlotBreakStartScale = 1.15f;
+        [SerializeField] private float traySlotBreakPeakScale = 1.35f;
+        [SerializeField] private float traySlotBreakEndScale = 0.65f;
+        [SerializeField] private int traySlotBreakSortingOrder = 9998;
+
+        [SerializeField] private int traySlotShardCount = 10;
+        [SerializeField] private float traySlotShardMinDistance = 0.18f;
+        [SerializeField] private float traySlotShardMaxDistance = 0.55f;
+        [SerializeField] private float traySlotShardMinScale = 0.08f;
+        [SerializeField] private float traySlotShardMaxScale = 0.18f;
+        [SerializeField] private float traySlotShardRotationSpeed = 220f;
+
         [Header("Generation")]
         [SerializeField] private bool spawnOnStart = true;
         [SerializeField] private bool useRandomSeed = true;
@@ -73,13 +100,23 @@ namespace ZenMatch.Runtime
         [Header("Debug")]
         [SerializeField] private bool logTileDistribution = true;
 
+  
+
         private readonly List<BoardStack> _runtimeStacks = new();
         private readonly List<BoardStackView> _runtimeViews = new();
         private readonly Dictionary<string, BoardStack> _stackByPointId = new();
         private readonly Dictionary<string, BoardStackView> _viewByPointId = new();
         private readonly HashSet<string> _completedPointIds = new();
+        private readonly HashSet<string> _traySlotUnlockPointIds = new();
+        private readonly Dictionary<string, GameObject> _traySlotRewardVisualByPointId = new();
 
         public IReadOnlyList<BoardStack> RuntimeStacks => _runtimeStacks;
+
+        public FixedLevelSO LastSpawnedFixedLevel { get; private set; }
+        public bool LastSpawnWasFixedLevel => LastSpawnedFixedLevel != null;
+
+        public event Action<string> PointCompleted;
+        public event Action<string> TraySlotUnlockPointCompleted;
 
         private void Start()
         {
@@ -91,6 +128,7 @@ namespace ZenMatch.Runtime
         public void SpawnBoard()
         {
             ClearSpawnedBoard();
+            LastSpawnedFixedLevel = null;
 
             System.Random rng = useRandomSeed
                 ? new System.Random()
@@ -120,11 +158,29 @@ namespace ZenMatch.Runtime
                 }
             }
 
+            foreach (var pair in _traySlotRewardVisualByPointId)
+            {
+                if (pair.Value != null)
+                {
+#if UNITY_EDITOR
+                    if (!Application.isPlaying)
+                        DestroyImmediate(pair.Value);
+                    else
+                        Destroy(pair.Value);
+#else
+        Destroy(pair.Value);
+#endif
+                }
+            }
+
+            _traySlotRewardVisualByPointId.Clear();
+
             _runtimeViews.Clear();
             _runtimeStacks.Clear();
             _stackByPointId.Clear();
             _viewByPointId.Clear();
             _completedPointIds.Clear();
+            _traySlotUnlockPointIds.Clear();
         }
 
         public bool TryTakeTopTile(string pointId, out BoardTileInstance removedTile)
@@ -248,6 +304,50 @@ namespace ZenMatch.Runtime
             return false;
         }
 
+        public bool TryTakeAnyNonHiddenTileOfType(TileTypeSO targetType, out BoardTileInstance removedTile, out string pointId)
+        {
+            removedTile = null;
+            pointId = null;
+
+            if (targetType == null)
+                return false;
+
+            for (int i = 0; i < _runtimeStacks.Count; i++)
+            {
+                BoardStack stack = _runtimeStacks[i];
+                if (stack == null || stack.Count <= 0)
+                    continue;
+
+                if (stack.VisibilityMode == StackVisibilityMode.Hidden)
+                    continue;
+
+                for (int tileIndex = 0; tileIndex < stack.Count; tileIndex++)
+                {
+                    BoardTileInstance tile = stack.GetTileAt(tileIndex);
+                    if (tile == null || tile.TileType == null)
+                        continue;
+
+                    if (tile.TileType != targetType)
+                        continue;
+
+                    removedTile = stack.RemoveAt(tileIndex);
+                    if (removedTile == null)
+                        return false;
+
+                    pointId = stack.PointId;
+
+                    RefreshStackView(pointId);
+
+                    if (stack.Count == 0)
+                        NotifyPointCompleted(pointId);
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool TryShuffleAllTiles(System.Random rng)
         {
             if (rng == null)
@@ -285,9 +385,7 @@ namespace ZenMatch.Runtime
             }
 
             for (int i = 0; i < tileTypes.Count; i++)
-            {
                 stacks[i].SetTileAt(indices[i], new BoardTileInstance(tileTypes[i]));
-            }
 
             for (int i = 0; i < _runtimeStacks.Count; i++)
             {
@@ -310,13 +408,7 @@ namespace ZenMatch.Runtime
             {
                 BoardStack stack = _runtimeStacks[i];
 
-                if (stack == null)
-                    continue;
-
-                if (stack.IsLocked)
-                    continue;
-
-                if (stack.Count <= 0)
+                if (stack == null || stack.IsLocked || stack.Count <= 0)
                     continue;
 
                 BoardTileInstance topTile = stack.PeekTop();
@@ -345,51 +437,6 @@ namespace ZenMatch.Runtime
 
             worldPosition = stack.GetWorldBasePosition();
             return true;
-        }
-
-        public bool TryTakeAnyNonHiddenTileOfType(TileTypeSO targetType, out BoardTileInstance removedTile, out string pointId)
-        {
-            removedTile = null;
-            pointId = null;
-
-            if (targetType == null)
-                return false;
-
-            for (int i = 0; i < _runtimeStacks.Count; i++)
-            {
-                BoardStack stack = _runtimeStacks[i];
-                if (stack == null || stack.Count <= 0)
-                    continue;
-
-                // Sadece hidden stack'lerden alma
-                if (stack.VisibilityMode == StackVisibilityMode.Hidden)
-                    continue;
-
-                for (int tileIndex = 0; tileIndex < stack.Count; tileIndex++)
-                {
-                    BoardTileInstance tile = stack.GetTileAt(tileIndex);
-                    if (tile == null || tile.TileType == null)
-                        continue;
-
-                    if (tile.TileType != targetType)
-                        continue;
-
-                    removedTile = stack.RemoveAt(tileIndex);
-                    if (removedTile == null)
-                        return false;
-
-                    pointId = stack.PointId;
-
-                    RefreshStackView(pointId);
-
-                    if (stack.Count == 0)
-                        NotifyPointCompleted(pointId);
-
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         public bool HasAnyRemainingTiles()
@@ -447,7 +494,7 @@ namespace ZenMatch.Runtime
 
         public List<Transform> GetAllVisibleTileTransforms()
         {
-            List<Transform> results = new List<Transform>();
+            List<Transform> results = new();
 
             for (int i = 0; i < _runtimeViews.Count; i++)
             {
@@ -472,7 +519,18 @@ namespace ZenMatch.Runtime
             if (string.IsNullOrWhiteSpace(pointId))
                 return;
 
-            _completedPointIds.Add(pointId);
+            bool newlyCompleted = _completedPointIds.Add(pointId);
+
+            if (!newlyCompleted)
+                return;
+
+            RemoveTraySlotRewardVisual(pointId);
+
+            PointCompleted?.Invoke(pointId);
+
+            if (_traySlotUnlockPointIds.Contains(pointId))
+                TraySlotUnlockPointCompleted?.Invoke(pointId);
+
             RefreshAllLockStates();
         }
 
@@ -483,6 +541,8 @@ namespace ZenMatch.Runtime
 
             if (!fixedLevelDatabase.TryGetFixedLevel(currentLevel, out FixedLevelSO fixedLevel) || fixedLevel == null)
                 return false;
+
+            LastSpawnedFixedLevel = fixedLevel;
 
             BoardLayoutSO layout = fixedLevel.Layout;
             if (layout == null)
@@ -505,7 +565,6 @@ namespace ZenMatch.Runtime
             }
 
             ApplyBackgroundFromFixedLevel(fixedLevel);
-
             EnsureStacksRoot();
 
             Dictionary<string, BoardPointAnchor> anchorMap = BuildAnchorMap(
@@ -567,7 +626,6 @@ namespace ZenMatch.Runtime
                 LogTileDistribution(generatedTiles);
 
             BuildRuntimeStacksFromPlan(resolvedPoints, stackHeights, generatedTiles);
-
             RefreshAllLockStates();
 
             Debug.Log(
@@ -714,6 +772,7 @@ namespace ZenMatch.Runtime
                 LogTileDistribution(generatedTiles);
 
             BuildRuntimeStacksFromPlan(resolvedPoints, stackHeights, generatedTiles);
+            RefreshAllLockStates();
 
             Debug.Log(
                 $"[BoardSpawner] Spawn tamamlandý. " +
@@ -933,6 +992,7 @@ namespace ZenMatch.Runtime
                             pointRef.visibilityMode,
                             pointRef.stackOpenDirection,
                             pointRef.startsLocked,
+                            pointRef.unlocksTraySlotOnComplete,
                             requiredIds,
                             minHeight,
                             maxHeight,
@@ -1096,6 +1156,12 @@ namespace ZenMatch.Runtime
                 if (stack.Count == 0)
                     continue;
 
+                if (point.UnlocksTraySlotOnComplete)
+                {
+                    _traySlotUnlockPointIds.Add(stack.PointId);
+                    CreateTraySlotRewardVisual(stack, point.RenderPriority);
+                }
+
                 _runtimeStacks.Add(stack);
                 _stackByPointId[stack.PointId] = stack;
 
@@ -1110,6 +1176,7 @@ namespace ZenMatch.Runtime
                     $"AssignedCursor: {tileCursor}, GeneratedCount: {generatedTiles.Count}",
                     this);
             }
+
         }
 
         private bool AreAllTileCountsMultipleOfThree(List<TileTypeSO> generatedTiles)
@@ -1168,6 +1235,61 @@ namespace ZenMatch.Runtime
             Debug.LogError(sb.ToString(), this);
         }
 
+        private void CreateTraySlotRewardVisual(BoardStack stack, int renderPriority)
+        {
+            if (stack == null)
+                return;
+
+            if (traySlotRewardSprite == null)
+                return;
+
+            GameObject go = new GameObject($"TraySlotReward_{stack.PointId}");
+
+            Transform parent = stacksRoot != null ? stacksRoot : transform;
+            go.transform.SetParent(parent, false);
+
+            go.transform.position = stack.GetWorldBasePosition() + traySlotRewardOffset;
+            go.transform.localScale = Vector3.one * traySlotRewardScale;
+
+            SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = traySlotRewardSprite;
+            sr.color = traySlotRewardColor;
+            sr.sortingLayerName = sortingLayerName;
+            sr.sortingOrder =
+                baseSortingOrder +
+                (renderPriority * sortingOrderStepPerRenderPriority) +
+                traySlotRewardSortingOffset;
+
+            _traySlotRewardVisualByPointId[stack.PointId] = go;
+        }
+
+        private void RemoveTraySlotRewardVisual(string pointId)
+        {
+            if (string.IsNullOrWhiteSpace(pointId))
+                return;
+
+            if (!_traySlotRewardVisualByPointId.TryGetValue(pointId, out GameObject go))
+                return;
+
+            if (go != null)
+            {
+                Vector3 breakPosition = go.transform.position;
+
+                PlayTraySlotBreakEffect(breakPosition);
+
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    DestroyImmediate(go);
+                else
+                    Destroy(go);
+#else
+        Destroy(go);
+#endif
+            }
+
+            _traySlotRewardVisualByPointId.Remove(pointId);
+        }
+
         private BoardStackView CreateStackView(BoardStack stack, int renderPriority)
         {
             GameObject stackGo = new GameObject($"Stack_{stack.PointId}");
@@ -1216,7 +1338,7 @@ namespace ZenMatch.Runtime
                 counts[tile]++;
             }
 
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new();
             sb.AppendLine("[BoardSpawner] Tile distribution debug:");
 
             int total = 0;
@@ -1244,7 +1366,7 @@ namespace ZenMatch.Runtime
             if (layout == null || resolvedPoints == null)
                 return;
 
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new();
             sb.AppendLine($"[BoardSpawner] Resolved points for layout: {layout.LayoutId}");
 
             for (int i = 0; i < resolvedPoints.Count; i++)
@@ -1258,6 +1380,181 @@ namespace ZenMatch.Runtime
             }
 
             Debug.Log(sb.ToString(), this);
+        }
+
+        private void PlayTraySlotBreakEffect(Vector3 worldPosition)
+        {
+            if (traySlotBreakSprite == null)
+                return;
+
+            StartCoroutine(TraySlotBreakEffectRoutine(worldPosition));
+        }
+
+        private IEnumerator TraySlotBreakEffectRoutine(Vector3 worldPosition)
+        {
+            GameObject mainBreak = CreateMainBreakVisual(worldPosition);
+
+            List<GameObject> shards = new();
+            List<Vector3> startPositions = new();
+            List<Vector3> targetPositions = new();
+            List<float> startRotations = new();
+            List<float> rotationDirections = new();
+            List<float> startScales = new();
+
+            for (int i = 0; i < traySlotShardCount; i++)
+            {
+                float angle = (360f / traySlotShardCount) * i + UnityEngine.Random.Range(-18f, 18f);
+                float rad = angle * Mathf.Deg2Rad;
+
+                Vector3 direction = new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f);
+                float distance = UnityEngine.Random.Range(traySlotShardMinDistance, traySlotShardMaxDistance);
+                float scale = UnityEngine.Random.Range(traySlotShardMinScale, traySlotShardMaxScale);
+
+                GameObject shard = new GameObject($"TraySlotShard_{i}");
+                shard.transform.SetParent(stacksRoot != null ? stacksRoot : transform, false);
+                shard.transform.position = worldPosition;
+                shard.transform.localScale = Vector3.one * scale;
+                shard.transform.rotation = Quaternion.Euler(0f, 0f, UnityEngine.Random.Range(0f, 360f));
+
+                SpriteRenderer sr = shard.AddComponent<SpriteRenderer>();
+                sr.sprite = traySlotBreakSprite;
+                sr.color = traySlotBreakColor;
+                sr.sortingLayerName = sortingLayerName;
+                sr.sortingOrder = traySlotBreakSortingOrder + 10 + i;
+
+                shards.Add(shard);
+                startPositions.Add(worldPosition);
+                targetPositions.Add(worldPosition + direction * distance);
+                startRotations.Add(UnityEngine.Random.Range(0f, 360f));
+                rotationDirections.Add(UnityEngine.Random.value > 0.5f ? 1f : -1f);
+                startScales.Add(scale);
+            }
+
+            float time = 0f;
+
+            while (time < traySlotBreakDuration)
+            {
+                time += Time.deltaTime;
+                float t = Mathf.Clamp01(time / traySlotBreakDuration);
+
+                UpdateMainBreakVisual(mainBreak, t);
+                UpdateShardVisuals(
+                    shards,
+                    startPositions,
+                    targetPositions,
+                    startRotations,
+                    rotationDirections,
+                    startScales,
+                    t);
+
+                yield return null;
+            }
+
+            if (mainBreak != null)
+                Destroy(mainBreak);
+
+            for (int i = 0; i < shards.Count; i++)
+            {
+                if (shards[i] != null)
+                    Destroy(shards[i]);
+            }
+        }
+
+        private GameObject CreateMainBreakVisual(Vector3 worldPosition)
+        {
+            GameObject go = new GameObject("TraySlotMainBreak");
+            go.transform.SetParent(stacksRoot != null ? stacksRoot : transform, false);
+            go.transform.position = worldPosition;
+            go.transform.localScale = Vector3.one * traySlotBreakStartScale;
+
+            SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = traySlotBreakSprite;
+            sr.color = traySlotBreakColor;
+            sr.sortingLayerName = sortingLayerName;
+            sr.sortingOrder = traySlotBreakSortingOrder;
+
+            return go;
+        }
+
+        private void UpdateMainBreakVisual(GameObject mainBreak, float t)
+        {
+            if (mainBreak == null)
+                return;
+
+            SpriteRenderer sr = mainBreak.GetComponent<SpriteRenderer>();
+            if (sr == null)
+                return;
+
+            float scale;
+
+            if (t < 0.22f)
+            {
+                float localT = t / 0.22f;
+                scale = Mathf.Lerp(traySlotBreakStartScale, traySlotBreakPeakScale, localT);
+            }
+            else
+            {
+                float localT = (t - 0.22f) / 0.78f;
+                scale = Mathf.Lerp(traySlotBreakPeakScale, traySlotBreakEndScale, localT);
+            }
+
+            mainBreak.transform.localScale = Vector3.one * scale;
+
+            Color c = traySlotBreakColor;
+
+            if (t < 0.18f)
+            {
+                c.a = traySlotBreakColor.a;
+            }
+            else
+            {
+                float fadeT = (t - 0.18f) / 0.82f;
+                c.a = Mathf.Lerp(traySlotBreakColor.a, 0f, fadeT);
+            }
+
+            sr.color = c;
+
+            float shake = Mathf.Sin(t * Mathf.PI * 10f) * 5f * (1f - t);
+            mainBreak.transform.rotation = Quaternion.Euler(0f, 0f, shake);
+        }
+
+        private void UpdateShardVisuals(
+            List<GameObject> shards,
+            List<Vector3> startPositions,
+            List<Vector3> targetPositions,
+            List<float> startRotations,
+            List<float> rotationDirections,
+            List<float> startScales,
+            float t)
+        {
+            if (shards == null)
+                return;
+
+            float moveT = 1f - Mathf.Pow(1f - t, 3f);
+            float alpha = Mathf.Lerp(traySlotBreakColor.a, 0f, t);
+
+            for (int i = 0; i < shards.Count; i++)
+            {
+                GameObject shard = shards[i];
+                if (shard == null)
+                    continue;
+
+                shard.transform.position = Vector3.Lerp(startPositions[i], targetPositions[i], moveT);
+
+                float rotation = startRotations[i] + rotationDirections[i] * traySlotShardRotationSpeed * t;
+                shard.transform.rotation = Quaternion.Euler(0f, 0f, rotation);
+
+                float scale = Mathf.Lerp(startScales[i], startScales[i] * 0.35f, t);
+                shard.transform.localScale = Vector3.one * scale;
+
+                SpriteRenderer sr = shard.GetComponent<SpriteRenderer>();
+                if (sr != null)
+                {
+                    Color c = traySlotBreakColor;
+                    c.a = alpha;
+                    sr.color = c;
+                }
+            }
         }
     }
 }

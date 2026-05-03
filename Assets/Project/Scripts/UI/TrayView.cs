@@ -40,10 +40,20 @@ namespace ZenMatch.UI
         [SerializeField] private Sprite emptySlotSprite;
         [SerializeField] private Color emptySlotColor = new Color(1f, 1f, 1f, 0.22f);
 
+        [Header("Locked Slots")]
+        [SerializeField] private Sprite lockIconSprite;
+        [SerializeField] private float lockIconScale = 0.55f;
+        [SerializeField] private Vector3 lockIconOffset = new Vector3(0f, 0.05f, 0f);
+        [SerializeField] private Color lockedSlotColor = new Color(1f, 1f, 1f, 0.12f);
+
         private readonly List<GameObject> _baseSlots = new();
+        private readonly List<GameObject> _lockIcons = new();
         private readonly List<GameObject> _tileVisuals = new();
+
         private Coroutine _activeAnimation;
         private int _currentCapacity = 0;
+        private int _maxVisualCapacity = 0;
+        private int _lockedSlots = 0;
         private TrayState _lastTrayState;
 
         public bool IsAnimating => _activeAnimation != null;
@@ -64,7 +74,11 @@ namespace ZenMatch.UI
             }
 
             _currentCapacity = trayState.CurrentCapacity;
-            EnsureBaseSlots(_currentCapacity);
+            _maxVisualCapacity = trayState.MaxVisualCapacity;
+            _lockedSlots = trayState.LockedSlots;
+
+            EnsureBaseSlots(_maxVisualCapacity);
+            RefreshLockedSlotVisuals(_currentCapacity, _maxVisualCapacity);
             RebuildTileVisualsFromSnapshot(trayState.Slots);
         }
 
@@ -87,18 +101,32 @@ namespace ZenMatch.UI
                 matchBurstEffect.PlayAt(pos);
             }
         }
+        public void PlayBurstWithColor(int slotIndex, Color color)
+        {
+            if (matchBurstEffect == null)
+                return;
+
+            Vector3 pos = GetSlotWorldPosition(slotIndex);
+            matchBurstEffect.PlayAt(pos, color);
+        }
 
         public void PlayMatchResolveSequence(
             List<TileTypeSO> beforeSlots,
             List<int> matchedSlotIndices,
             List<TileTypeSO> afterSlots,
-            int capacity)
+            int currentCapacity,
+            int maxVisualCapacity,
+            int lockedSlots)
         {
             if (_activeAnimation != null)
                 StopCoroutine(_activeAnimation);
 
-            _currentCapacity = capacity;
-            EnsureBaseSlots(_currentCapacity);
+            _currentCapacity = currentCapacity;
+            _maxVisualCapacity = maxVisualCapacity;
+            _lockedSlots = lockedSlots;
+
+            EnsureBaseSlots(_maxVisualCapacity);
+            RefreshLockedSlotVisuals(_currentCapacity, _maxVisualCapacity);
 
             _activeAnimation = StartCoroutine(PlayMatchResolveSequenceRoutine(
                 beforeSlots,
@@ -132,12 +160,20 @@ namespace ZenMatch.UI
                 for (int i = 0; i < _baseSlots.Count; i++)
                 {
                     if (_baseSlots[i] != null)
+                    {
                         _baseSlots[i].transform.localPosition = GetSlotLocalPosition(i);
+
+                        SpriteRenderer sr = _baseSlots[i].GetComponent<SpriteRenderer>();
+                        if (sr != null)
+                            sr.color = i >= _currentCapacity ? lockedSlotColor : emptySlotColor;
+                    }
                 }
+
                 return;
             }
 
             ClearBaseSlots();
+            ClearLockIcons();
 
             for (int i = 0; i < capacity; i++)
             {
@@ -149,9 +185,35 @@ namespace ZenMatch.UI
                 sr.sortingLayerName = sortingLayerName;
                 sr.sortingOrder = baseSortingOrder + i;
                 sr.sprite = emptySlotSprite;
-                sr.color = emptySlotSprite != null ? emptySlotColor : new Color(1f, 1f, 1f, 0f);
+                sr.color = emptySlotSprite != null
+                    ? (i >= _currentCapacity ? lockedSlotColor : emptySlotColor)
+                    : new Color(1f, 1f, 1f, 0f);
 
                 _baseSlots.Add(go);
+            }
+        }
+
+        private void RefreshLockedSlotVisuals(int currentCapacity, int maxVisualCapacity)
+        {
+            ClearLockIcons();
+
+            if (lockIconSprite == null || visualsRoot == null)
+                return;
+
+            for (int i = currentCapacity; i < maxVisualCapacity; i++)
+            {
+                GameObject go = new GameObject($"TrayLockIcon_{i}");
+                go.transform.SetParent(visualsRoot, false);
+                go.transform.localPosition = GetSlotLocalPosition(i) + lockIconOffset;
+                go.transform.localScale = Vector3.one * lockIconScale;
+
+                SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingLayerName = sortingLayerName;
+                sr.sortingOrder = baseSortingOrder + tileSortingOffset + 500 + i;
+                sr.sprite = lockIconSprite;
+                sr.color = Color.white;
+
+                _lockIcons.Add(go);
             }
         }
 
@@ -356,6 +418,7 @@ namespace ZenMatch.UI
         public void ClearAllVisuals()
         {
             ClearBaseSlots();
+            ClearLockIcons();
             ClearTileVisuals();
         }
 
@@ -368,6 +431,17 @@ namespace ZenMatch.UI
             }
 
             _baseSlots.Clear();
+        }
+
+        private void ClearLockIcons()
+        {
+            for (int i = _lockIcons.Count - 1; i >= 0; i--)
+            {
+                if (_lockIcons[i] != null)
+                    DestroySafe(_lockIcons[i]);
+            }
+
+            _lockIcons.Clear();
         }
 
         private void ClearTileVisuals()

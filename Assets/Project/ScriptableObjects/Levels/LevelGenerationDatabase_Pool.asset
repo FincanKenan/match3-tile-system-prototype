@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: LevelGenerationDatabase_Pool
   m_EditorClassIdentifier: 
   rules:
-  - {fileID: 11400000, guid: addaf4fc689c6c2478f2ffce7cfd388c, type: 2}
+  - {fileID: 11400000, guid: 1862274e979eeb1419fd6db14dda4ed2, type: 2}
   - {fileID: 11400000, guid: fd22751bd8f4cb247987aa7df2be1153, type: 2}

@@ -19,8 +19,57 @@ namespace ZenMatch.Gameplay
 
         public void Initialize()
         {
+            InitializeWithActiveCapacity(capacity);
+        }
+
+        public void InitializeWithActiveCapacity(int activeCapacity)
+        {
             _state = new TrayState(capacity);
+            _state.SetActiveCapacity(activeCapacity);
             RefreshView();
+        }
+
+        public void ApplyActiveCapacity(int activeCapacity)
+        {
+            if (_state == null)
+                _state = new TrayState(capacity);
+
+            _state.SetActiveCapacity(activeCapacity);
+            RefreshView();
+        }
+
+        public bool UnlockOneLockedSlot()
+        {
+            if (_state == null)
+                Initialize();
+
+            bool unlocked = _state.UnlockOneLockedSlot();
+            if (unlocked)
+                RefreshView();
+
+            return unlocked;
+        }
+
+
+
+        public bool UnlockOneLockedSlot(out int unlockedSlotIndex)
+        {
+            unlockedSlotIndex = -1;
+
+            if (_state == null)
+                Initialize();
+
+            int beforeCapacity = _state.CurrentCapacity;
+
+            bool unlocked = _state.UnlockOneLockedSlot();
+
+            if (unlocked)
+            {
+                unlockedSlotIndex = beforeCapacity;
+                RefreshView();
+            }
+
+            return unlocked;
         }
 
         public void ResetTray()
@@ -73,7 +122,9 @@ namespace ZenMatch.Gameplay
                         beforeSlots,
                         matchedSlotIndices,
                         afterSlots,
-                        _state.CurrentCapacity);
+                        _state.CurrentCapacity,
+                        _state.MaxVisualCapacity,
+                        _state.LockedSlots);
                 }
                 else
                 {

@@ -67,10 +67,33 @@ namespace ZenMatch.Gameplay
                 boosterManager = FindFirstObjectByType<BoosterManager>();
         }
 
-        private void Start()
+        private IEnumerator Start()
         {
-            if (trayController != null && trayController.State == null)
+            yield return null;
+
+            if (boardSpawner != null)
+                boardSpawner.TraySlotUnlockPointCompleted += HandleTraySlotUnlockPointCompleted;
+
+            if (trayController == null)
+                yield break;
+
+            FixedLevelSO fixedLevel = boardSpawner != null
+                ? boardSpawner.LastSpawnedFixedLevel
+                : null;
+
+            if (fixedLevel != null && fixedLevel.UseSpecialTraySettings)
+            {
+                trayController.InitializeWithActiveCapacity(fixedLevel.StartingActiveTrayCapacity);
+
+                Debug.Log(
+                    $"[LevelController] Special tray settings applied. " +
+                    $"Level: {fixedLevel.LevelNumber}, ActiveCapacity: {fixedLevel.StartingActiveTrayCapacity}",
+                    this);
+            }
+            else
+            {
                 trayController.Initialize();
+            }
         }
 
         public void SetInputEnabled(bool enabled)
@@ -81,6 +104,37 @@ namespace ZenMatch.Gameplay
         public void ClearUndoHistory()
         {
             _lastMove = null;
+        }
+
+        private void HandleTraySlotUnlockPointCompleted(string pointId)
+        {
+            if (trayController == null)
+                return;
+
+            bool unlocked = trayController.UnlockOneLockedSlot(out int unlockedSlotIndex);
+
+            if (unlocked)
+            {
+                if (trayController.View != null && unlockedSlotIndex >= 0)
+                {
+                    trayController.View.PlayBurstWithColor(
+                    unlockedSlotIndex,
+                    new Color(0.45f, 1f, 1f, 1f));
+                }
+
+                Debug.Log($"[LevelController] Tray slot unlocked by point: {pointId} | SlotIndex: {unlockedSlotIndex}", this);
+            }
+            else
+            {
+                Debug.Log($"[LevelController] Unlock point completed but no locked tray slot exists. Point: {pointId}", this);
+            }
+        }
+
+
+        private void OnDestroy()
+        {
+            if (boardSpawner != null)
+                boardSpawner.TraySlotUnlockPointCompleted -= HandleTraySlotUnlockPointCompleted;
         }
 
         public bool TryUndoLastMove()

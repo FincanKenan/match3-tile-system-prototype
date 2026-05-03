@@ -7,10 +7,23 @@ namespace ZenMatch.Gameplay
     public sealed class TrayState
     {
         private readonly List<TileTypeSO> _slots = new();
+
         private int _temporaryCapacityBonus;
+        private int _lockedSlots;
 
         public int Capacity { get; }
-        public int CurrentCapacity => Capacity + _temporaryCapacityBonus;
+
+        public int LockedSlots => _lockedSlots;
+        public int MaxVisualCapacity => Capacity;
+
+        public int CurrentCapacity
+        {
+            get
+            {
+                int value = Capacity - _lockedSlots + _temporaryCapacityBonus;
+                return value < 1 ? 1 : value;
+            }
+        }
 
         public IReadOnlyList<TileTypeSO> Slots => _slots;
         public int Count => _slots.Count;
@@ -20,6 +33,7 @@ namespace ZenMatch.Gameplay
         {
             Capacity = capacity < 1 ? 1 : capacity;
             _temporaryCapacityBonus = 0;
+            _lockedSlots = 0;
         }
 
         public void ClearAll()
@@ -44,6 +58,37 @@ namespace ZenMatch.Gameplay
                 if (slots[i] != null)
                     _slots.Add(slots[i]);
             }
+        }
+
+        public void SetLockedSlots(int lockedSlots)
+        {
+            if (lockedSlots < 0)
+                lockedSlots = 0;
+
+            if (lockedSlots >= Capacity)
+                lockedSlots = Capacity - 1;
+
+            _lockedSlots = lockedSlots;
+        }
+
+        public void SetActiveCapacity(int activeCapacity)
+        {
+            if (activeCapacity < 1)
+                activeCapacity = 1;
+
+            if (activeCapacity > Capacity)
+                activeCapacity = Capacity;
+
+            _lockedSlots = Capacity - activeCapacity;
+        }
+
+        public bool UnlockOneLockedSlot()
+        {
+            if (_lockedSlots <= 0)
+                return false;
+
+            _lockedSlots--;
+            return true;
         }
 
         public void Add(TileTypeSO tileType)
@@ -147,7 +192,7 @@ namespace ZenMatch.Gameplay
         public string GetDebugSummary()
         {
             if (_slots.Count == 0)
-                return $"[TrayState] EMPTY | Capacity: {CurrentCapacity}";
+                return $"[TrayState] EMPTY | Capacity: {CurrentCapacity} | MaxVisual: {MaxVisualCapacity} | Locked: {LockedSlots}";
 
             Dictionary<TileTypeSO, int> counts = new();
             for (int i = 0; i < _slots.Count; i++)
@@ -179,6 +224,8 @@ namespace ZenMatch.Gameplay
 
             sb.Append(" | Total: ").Append(_slots.Count);
             sb.Append(" | Capacity: ").Append(CurrentCapacity);
+            sb.Append(" | MaxVisual: ").Append(MaxVisualCapacity);
+            sb.Append(" | Locked: ").Append(LockedSlots);
 
             return sb.ToString();
         }

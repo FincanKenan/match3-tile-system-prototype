@@ -12,6 +12,10 @@ namespace ZenMatch.Data
         [Header("Tile Source")]
         [SerializeField] private TileBagSO tileBag;
 
+        [Header("Special Tray Settings")]
+        [SerializeField] private bool useSpecialTraySettings = false;
+        [Min(1)][SerializeField] private int startingActiveTrayCapacity = 7;
+
         [Header("Optional Background Override")]
         [SerializeField] private bool useBackgroundOverride = false;
         [SerializeField] private Sprite backgroundLayerBottomOverride;
@@ -20,6 +24,10 @@ namespace ZenMatch.Data
         public int LevelNumber => levelNumber;
         public BoardLayoutSO Layout => layout;
         public TileBagSO TileBag => tileBag;
+
+        public bool UseSpecialTraySettings => useSpecialTraySettings;
+        public int StartingActiveTrayCapacity => startingActiveTrayCapacity;
+
         public bool UseBackgroundOverride => useBackgroundOverride;
         public Sprite BackgroundLayerBottomOverride => backgroundLayerBottomOverride;
         public Sprite BackgroundLayerTopOverride => backgroundLayerTopOverride;
@@ -28,6 +36,9 @@ namespace ZenMatch.Data
         {
             if (levelNumber < 1)
                 levelNumber = 1;
+
+            if (startingActiveTrayCapacity < 1)
+                startingActiveTrayCapacity = 1;
         }
     }
 }

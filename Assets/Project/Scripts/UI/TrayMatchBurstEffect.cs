@@ -17,17 +17,30 @@ namespace ZenMatch.UI
         [SerializeField] private Sprite effectSprite;
         [SerializeField] private string sortingLayerName = "Default";
         [SerializeField] private int sortingOrder = 2500;
+
+        [Header("Default Color")]
         [SerializeField] private Color effectColor = Color.white;
 
+        // ===============================
+        // NORMAL KULLANIM
+        // ===============================
         public void PlayAt(Vector3 worldPosition)
+        {
+            PlayAt(worldPosition, effectColor);
+        }
+
+        // ===============================
+        // RENKLÝ KULLANIM
+        // ===============================
+        public void PlayAt(Vector3 worldPosition, Color customColor)
         {
             if (effectSprite == null)
                 return;
 
-            StartCoroutine(PlayRoutine(worldPosition));
+            StartCoroutine(PlayRoutine(worldPosition, customColor));
         }
 
-        private IEnumerator PlayRoutine(Vector3 worldPosition)
+        private IEnumerator PlayRoutine(Vector3 worldPosition, Color burstColor)
         {
             GameObject go = new GameObject("TrayMatchBurst");
             go.transform.position = worldPosition;
@@ -38,7 +51,7 @@ namespace ZenMatch.UI
             sr.sortingLayerName = sortingLayerName;
             sr.sortingOrder = sortingOrder;
 
-            Color c = effectColor;
+            Color c = burstColor;
             c.a = startAlpha;
             sr.color = c;
 
