@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using ZenMatch.Data;
 
@@ -41,15 +41,31 @@ namespace ZenMatch.Runtime
         [Header("Hidden View")]
         [SerializeField] private Sprite hiddenBackSprite;
 
+        [Header("Inner Stack Dim")]
+        [SerializeField] private float innerDimStep = 0.12f;
+        [SerializeField] private float innerMaxDim = 0.4f;
+
         [Header("Sorting")]
         [SerializeField] private string sortingLayerName = "Default";
         [SerializeField] private int baseSortingOrder = 0;
         [SerializeField] private int sortingStepPerTile = 1;
 
         [Header("Visual State")]
-        [SerializeField] private Color topTileColor = Color.white;
-        [SerializeField] private Color coveredTileColor = new Color(0.72f, 0.72f, 0.72f, 1f);
-        [SerializeField] private Color lockedTileColor = new Color(0.72f, 0.72f, 0.72f, 1f);
+        [SerializeField] private Color tileColor = Color.white;
+
+        [Header("Selectable Glow")]
+        [SerializeField] private Sprite selectableGlowSprite;
+        [SerializeField] private Color selectableGlowColor = new Color(1f, 1f, 1f, 0.18f);
+        [SerializeField] private float selectableGlowScale = 1.05f;
+        [SerializeField] private int selectableGlowSortingOffset = 1;
+        [SerializeField] private bool showGlowOnExposedLine = false;
+
+        [Header("Glow Pulse")]
+        [SerializeField] private bool enableGlowPulse = true;
+        [SerializeField] private float pulseSpeed = 1.5f;
+        [SerializeField] private float pulseAmount = 0.04f;
+
+        private float _stackDimFactor = 0f;
 
         private readonly List<GameObject> _spawnedVisuals = new();
         private BoardStack _stack;
@@ -67,12 +83,13 @@ namespace ZenMatch.Runtime
         }
 
         public void Configure(
-            Vector3 verticalOffsetStep,
-            Vector3 horizontalOffsetStep,
-            Sprite hiddenSprite,
-            string layerName,
-            int startSortingOrder,
-            int perTileSortingStep)
+    Vector3 verticalOffsetStep,
+    Vector3 horizontalOffsetStep,
+    Sprite hiddenSprite,
+    string layerName,
+    int startSortingOrder,
+    int perTileSortingStep,
+    float stackDimFactor)
         {
             verticalStackOffsetStep = verticalOffsetStep;
             horizontalStackOffsetStep = horizontalOffsetStep;
@@ -80,6 +97,27 @@ namespace ZenMatch.Runtime
             sortingLayerName = layerName;
             baseSortingOrder = startSortingOrder;
             sortingStepPerTile = perTileSortingStep;
+            _stackDimFactor = Mathf.Clamp01(stackDimFactor);
+        }
+
+        public void ConfigureSelectableGlow(
+    Sprite glowSprite,
+    Color glowColor,
+    float glowScale,
+    int glowSortingOffset,
+    bool glowOnExposed)
+        {
+            selectableGlowSprite = glowSprite;
+            selectableGlowColor = glowColor;
+            selectableGlowScale = glowScale;
+            selectableGlowSortingOffset = glowSortingOffset;
+            showGlowOnExposedLine = glowOnExposed;
+        }
+
+        public void SetStackDimFactor(float dimFactor)
+        {
+            _stackDimFactor = Mathf.Clamp01(dimFactor);
+            Rebuild();
         }
 
         public void Rebuild()
@@ -115,6 +153,9 @@ namespace ZenMatch.Runtime
                 sr.sortingLayerName = sortingLayerName;
                 sr.sortingOrder = baseSortingOrder + (sortingStepPerTile * i);
                 sr.color = ResolveColorForIndex(i, topIndex);
+
+                if (CanShowSelectableGlow(i, topIndex))
+                    CreateSelectableGlow(visual.transform, sr.sortingOrder);
 
                 bool shouldAddCollider = ShouldAddColliderForIndex(i, topIndex);
                 if (shouldAddCollider && sr.sprite != null)
@@ -178,6 +219,45 @@ namespace ZenMatch.Runtime
                 return true;
 
             return index == topIndex;
+        }
+
+        private bool CanShowSelectableGlow(int index, int topIndex)
+        {
+            if (_stack == null)
+                return false;
+
+            if (selectableGlowSprite == null)
+                return false;
+
+            if (_stack.IsLocked)
+                return false;
+
+            
+
+            if (_stack.LayoutMode == StackLayoutMode.ExposedLine)
+                return showGlowOnExposedLine;
+
+            return index == topIndex;
+        }
+
+        private void CreateSelectableGlow(Transform parent, int tileSortingOrder)
+        {
+            GameObject glow = new GameObject("SelectableGlow");
+            glow.transform.SetParent(parent, false);
+            glow.transform.localPosition = Vector3.zero;
+            glow.transform.localScale = Vector3.one * selectableGlowScale;
+
+            SpriteRenderer sr = glow.AddComponent<SpriteRenderer>();
+            sr.sprite = selectableGlowSprite;
+            sr.color = selectableGlowColor;
+            sr.sortingLayerName = sortingLayerName;
+            sr.sortingOrder = tileSortingOrder + selectableGlowSortingOffset;
+
+            if (enableGlowPulse)
+            {
+                GlowPulse pulse = glow.AddComponent<GlowPulse>();
+                pulse.Init(pulseSpeed, pulseAmount);
+            }
         }
 
         private int GetVisualIndex(int slotIndex)
@@ -346,15 +426,37 @@ namespace ZenMatch.Runtime
         private Color ResolveColorForIndex(int index, int topIndex)
         {
             if (_stack == null)
-                return Color.white;
+                return tileColor;
 
-            if (_stack.IsLocked)
-                return lockedTileColor;
+            Color baseColor = ApplyStackDim(tileColor);
 
-            if (_stack.LayoutMode == StackLayoutMode.ExposedLine)
-                return Color.white;
+            if (index == topIndex)
+                return baseColor;
 
-            return index == topIndex ? topTileColor : coveredTileColor;
+            int depth = topIndex - index;
+            if (depth == 1)
+                return baseColor;
+
+            // Kararma 2. alttaki taştan başlasın.
+            float innerDim = Mathf.Min((depth - 1) * innerDimStep, innerMaxDim);
+            float final = 1f - innerDim;
+
+            return new Color(
+                baseColor.r * final,
+                baseColor.g * final,
+                baseColor.b * final,
+                baseColor.a);
+        }
+
+        private Color ApplyStackDim(Color baseColor)
+        {
+            float value = 1f - _stackDimFactor;
+
+            return new Color(
+                baseColor.r * value,
+                baseColor.g * value,
+                baseColor.b * value,
+                baseColor.a);
         }
 
         private void DestroySafe(GameObject go)

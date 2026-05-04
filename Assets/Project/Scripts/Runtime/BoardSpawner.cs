@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -91,6 +91,19 @@ namespace ZenMatch.Runtime
         [SerializeField] private float traySlotShardMinScale = 0.08f;
         [SerializeField] private float traySlotShardMaxScale = 0.18f;
         [SerializeField] private float traySlotShardRotationSpeed = 220f;
+
+        [Header("Locked Stack Dim Steps")]
+        [SerializeField, Range(0f, 0.95f)] private float lockedStackDimRank1 = 0.10f;
+        [SerializeField, Range(0f, 0.95f)] private float lockedStackDimRank2 = 0.22f;
+        [SerializeField, Range(0f, 0.95f)] private float lockedStackDimRank3 = 0.35f;
+        [SerializeField, Range(0f, 0.95f)] private float lockedStackDimRank4 = 0.48f;
+
+        [Header("Selectable Glow Settings")]
+        [SerializeField] private Sprite selectableGlowSprite;
+        [SerializeField] private Color selectableGlowColor = new Color(1f, 1f, 1f, 0.22f);
+        [SerializeField] private float selectableGlowScale = 1.12f;
+        [SerializeField] private int selectableGlowSortingOffset = -1;
+        [SerializeField] private bool showGlowOnExposedLine = false;
 
         [Header("Generation")]
         [SerializeField] private bool spawnOnStart = true;
@@ -547,20 +560,20 @@ namespace ZenMatch.Runtime
             BoardLayoutSO layout = fixedLevel.Layout;
             if (layout == null)
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} için BoardLayoutSO atanmadý.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} iÃ§in BoardLayoutSO atanmadÄ±.", this);
                 return true;
             }
 
             TileBagSO tileBag = fixedLevel.TileBag;
             if (tileBag == null)
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} için TileBagSO atanmadý.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} iÃ§in TileBagSO atanmadÄ±.", this);
                 return true;
             }
 
             if (!tileBag.HasValidEntries())
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} TileBag içinde geçerli entry yok.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} TileBag iÃ§inde geÃ§erli entry yok.", this);
                 return true;
             }
 
@@ -575,21 +588,21 @@ namespace ZenMatch.Runtime
 
             if (resolvedPoints.Count == 0)
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} için scene anchor bulunamadý. Layout: {layout.LayoutId}", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} iÃ§in scene anchor bulunamadÄ±. Layout: {layout.LayoutId}", this);
                 return true;
             }
 
             int totalTiles = ComputeFixedTotalTiles(resolvedPoints);
             if (totalTiles < 3)
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} toplam tile sayýsý 3'ten küçük.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} toplam tile sayÄ±sÄ± 3'ten kÃ¼Ã§Ã¼k.", this);
                 return true;
             }
 
             if (totalTiles % 3 != 0)
             {
                 Debug.LogError(
-                    $"[BoardSpawner] Fixed level {currentLevel} toplam tile sayýsý 3'ün katý olmalý. CurrentTotal: {totalTiles}",
+                    $"[BoardSpawner] Fixed level {currentLevel} toplam tile sayÄ±sÄ± 3'Ã¼n katÄ± olmalÄ±. CurrentTotal: {totalTiles}",
                     this);
                 return true;
             }
@@ -597,7 +610,7 @@ namespace ZenMatch.Runtime
             List<int> stackHeights = BuildExactStackHeightsFromResolvedPoints(resolvedPoints);
             if (stackHeights == null || stackHeights.Count != resolvedPoints.Count)
             {
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} stack height planý oluþturulamadý.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} stack height planÄ± oluÅŸturulamadÄ±.", this);
                 return true;
             }
 
@@ -609,7 +622,7 @@ namespace ZenMatch.Runtime
             if (generatedTiles == null || generatedTiles.Count != totalTiles)
             {
                 Debug.LogError(
-                    $"[BoardSpawner] Fixed level {currentLevel} için tile distribution oluþturulamadý. " +
+                    $"[BoardSpawner] Fixed level {currentLevel} iÃ§in tile distribution oluÅŸturulamadÄ±. " +
                     $"Expected: {totalTiles}, Actual: {(generatedTiles == null ? 0 : generatedTiles.Count)}",
                     this);
                 return true;
@@ -618,7 +631,7 @@ namespace ZenMatch.Runtime
             if (!AreAllTileCountsMultipleOfThree(generatedTiles))
             {
                 LogInvalidTileCounts(generatedTiles);
-                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} tile daðýlýmýnda 3'ün katý olmayan type bulundu.", this);
+                Debug.LogError($"[BoardSpawner] Fixed level {currentLevel} tile daÄŸÄ±lÄ±mÄ±nda 3'Ã¼n katÄ± olmayan type bulundu.", this);
                 return true;
             }
 
@@ -629,7 +642,7 @@ namespace ZenMatch.Runtime
             RefreshAllLockStates();
 
             Debug.Log(
-                $"[BoardSpawner] Fixed level spawn tamamlandý. " +
+                $"[BoardSpawner] Fixed level spawn tamamlandÄ±. " +
                 $"Level: {currentLevel}, Layout: {layout.LayoutId}, FinalTiles: {totalTiles}, StackCount: {_runtimeStacks.Count}",
                 this);
 
@@ -640,13 +653,13 @@ namespace ZenMatch.Runtime
         {
             if (generationDatabase == null)
             {
-                Debug.LogError("[BoardSpawner] LevelGenerationDatabaseSO atanmadý.", this);
+                Debug.LogError("[BoardSpawner] LevelGenerationDatabaseSO atanmadÄ±.", this);
                 return;
             }
 
             if (!generationDatabase.TryGetRuleForLevel(currentLevel, out LevelRangeRuleSO rule) || rule == null)
             {
-                Debug.LogError($"[BoardSpawner] Level {currentLevel} için uygun LevelRangeRule bulunamadý.", this);
+                Debug.LogError($"[BoardSpawner] Level {currentLevel} iÃ§in uygun LevelRangeRule bulunamadÄ±.", this);
                 return;
             }
 
@@ -655,27 +668,27 @@ namespace ZenMatch.Runtime
             TileBagSO tileBag = rule.TileBag;
             if (tileBag == null)
             {
-                Debug.LogError("[BoardSpawner] Rule içinde TileBagSO atanmadý.", this);
+                Debug.LogError("[BoardSpawner] Rule iÃ§inde TileBagSO atanmadÄ±.", this);
                 return;
             }
 
             if (!tileBag.HasValidEntries())
             {
-                Debug.LogError("[BoardSpawner] Rule TileBag içinde geçerli entry yok.", this);
+                Debug.LogError("[BoardSpawner] Rule TileBag iÃ§inde geÃ§erli entry yok.", this);
                 return;
             }
 
             List<WeightedLayoutReference> weightedLayouts = rule.GetAllAllowedWeightedLayouts();
             if (weightedLayouts.Count == 0)
             {
-                Debug.LogError("[BoardSpawner] Rule içinde kullanýlabilir weighted layout yok.", this);
+                Debug.LogError("[BoardSpawner] Rule iÃ§inde kullanÄ±labilir weighted layout yok.", this);
                 return;
             }
 
             BoardLayoutSO selectedLayout = PickWeightedLayout(weightedLayouts, rng);
             if (selectedLayout == null)
             {
-                Debug.LogError("[BoardSpawner] Weighted layout seçimi null geldi.", this);
+                Debug.LogError("[BoardSpawner] Weighted layout seÃ§imi null geldi.", this);
                 return;
             }
 
@@ -689,7 +702,7 @@ namespace ZenMatch.Runtime
 
             if (resolvedPoints.Count == 0)
             {
-                Debug.LogError($"[BoardSpawner] Layout için scene anchor bulunamadý. Layout: {selectedLayout.LayoutId}", this);
+                Debug.LogError($"[BoardSpawner] Layout iÃ§in scene anchor bulunamadÄ±. Layout: {selectedLayout.LayoutId}", this);
                 return;
             }
 
@@ -702,9 +715,9 @@ namespace ZenMatch.Runtime
             if (normalizedTotalTiles > maxPossibleTiles)
             {
                 Debug.LogWarning(
-                    $"[BoardSpawner] Normalize tile sayýsý point bazlý maksimum kapasiteyi aþýyor. " +
+                    $"[BoardSpawner] Normalize tile sayÄ±sÄ± point bazlÄ± maksimum kapasiteyi aÅŸÄ±yor. " +
                     $"Requested: {requestedTotalTiles}, Normalized: {normalizedTotalTiles}, MaxPossible: {maxPossibleTiles}. " +
-                    $"Tile sayýsý kapasiteye göre düþürülecek.",
+                    $"Tile sayÄ±sÄ± kapasiteye gÃ¶re dÃ¼ÅŸÃ¼rÃ¼lecek.",
                     this);
 
                 normalizedTotalTiles = maxPossibleTiles;
@@ -723,7 +736,7 @@ namespace ZenMatch.Runtime
                 else
                 {
                     Debug.LogError(
-                        $"[BoardSpawner] Point bazlý min/max stack kurallarý ile geçerli 3'ün katý tile sayýsý üretilemedi. " +
+                        $"[BoardSpawner] Point bazlÄ± min/max stack kurallarÄ± ile geÃ§erli 3'Ã¼n katÄ± tile sayÄ±sÄ± Ã¼retilemedi. " +
                         $"MinPossible: {minPossibleTiles}, MaxPossible: {maxPossibleTiles}",
                         this);
                     return;
@@ -732,7 +745,7 @@ namespace ZenMatch.Runtime
 
             if (normalizedTotalTiles < 3)
             {
-                Debug.LogError("[BoardSpawner] Final total tile sayýsý 3'ten küçük kaldý. Rule/layout ayarlarýný kontrol et.", this);
+                Debug.LogError("[BoardSpawner] Final total tile sayÄ±sÄ± 3'ten kÃ¼Ã§Ã¼k kaldÄ±. Rule/layout ayarlarÄ±nÄ± kontrol et.", this);
                 return;
             }
 
@@ -743,7 +756,7 @@ namespace ZenMatch.Runtime
 
             if (stackHeights == null || stackHeights.Count != resolvedPoints.Count)
             {
-                Debug.LogError("[BoardSpawner] Point bazlý stack height planý oluþturulamadý.", this);
+                Debug.LogError("[BoardSpawner] Point bazlÄ± stack height planÄ± oluÅŸturulamadÄ±.", this);
                 return;
             }
 
@@ -755,7 +768,7 @@ namespace ZenMatch.Runtime
             if (generatedTiles == null || generatedTiles.Count != normalizedTotalTiles)
             {
                 Debug.LogError(
-                    $"[BoardSpawner] Triple tile distribution oluþturulamadý veya yanlýþ sayýda tile üretti. " +
+                    $"[BoardSpawner] Triple tile distribution oluÅŸturulamadÄ± veya yanlÄ±ÅŸ sayÄ±da tile Ã¼retti. " +
                     $"Expected: {normalizedTotalTiles}, Actual: {(generatedTiles == null ? 0 : generatedTiles.Count)}",
                     this);
                 return;
@@ -764,7 +777,7 @@ namespace ZenMatch.Runtime
             if (!AreAllTileCountsMultipleOfThree(generatedTiles))
             {
                 LogInvalidTileCounts(generatedTiles);
-                Debug.LogError("[BoardSpawner] Üretilen tile daðýlýmýnda 3'ün katý olmayan type bulundu.", this);
+                Debug.LogError("[BoardSpawner] Ãœretilen tile daÄŸÄ±lÄ±mÄ±nda 3'Ã¼n katÄ± olmayan type bulundu.", this);
                 return;
             }
 
@@ -775,7 +788,7 @@ namespace ZenMatch.Runtime
             RefreshAllLockStates();
 
             Debug.Log(
-                $"[BoardSpawner] Spawn tamamlandý. " +
+                $"[BoardSpawner] Spawn tamamlandÄ±. " +
                 $"Level: {currentLevel}, Layout: {selectedLayout.LayoutId}, " +
                 $"RequestedTiles: {requestedTotalTiles}, FinalTiles: {generatedTiles.Count}, StackCount: {_runtimeStacks.Count}",
                 this);
@@ -793,7 +806,7 @@ namespace ZenMatch.Runtime
 
                 if (backgroundPresenter == null)
                 {
-                    Debug.LogWarning("[BoardSpawner] Scene içinde BackgroundPresenter bulunamadý.", this);
+                    Debug.LogWarning("[BoardSpawner] Scene iÃ§inde BackgroundPresenter bulunamadÄ±.", this);
                     return;
                 }
 
@@ -822,7 +835,7 @@ namespace ZenMatch.Runtime
 
             if (backgroundPresenter == null)
             {
-                Debug.LogWarning("[BoardSpawner] Scene içinde BackgroundPresenter bulunamadý.", this);
+                Debug.LogWarning("[BoardSpawner] Scene iÃ§inde BackgroundPresenter bulunamadÄ±.", this);
                 return;
             }
 
@@ -849,6 +862,8 @@ namespace ZenMatch.Runtime
                     RefreshStackView(stack.PointId);
                 }
             }
+
+            RefreshAllStackDims();
         }
 
         private bool CanUnlock(BoardStack stack)
@@ -860,7 +875,7 @@ namespace ZenMatch.Runtime
             if (requiredIds == null || requiredIds.Count == 0)
             {
                 Debug.LogWarning(
-                    $"[BoardSpawner] Locked point dependency listesi boþ. Point: {stack.PointId}",
+                    $"[BoardSpawner] Locked point dependency listesi boÅŸ. Point: {stack.PointId}",
                     this);
                 return false;
             }
@@ -1015,8 +1030,8 @@ namespace ZenMatch.Runtime
                 if (point.MinStackHeight != point.MaxStackHeight)
                 {
                     Debug.LogWarning(
-                        $"[BoardSpawner] Fixed level point exact deðil. PointId: {point.Anchor.PointId}, " +
-                        $"Min: {point.MinStackHeight}, Max: {point.MaxStackHeight}. Fixed level için min=max önerilir.",
+                        $"[BoardSpawner] Fixed level point exact deÄŸil. PointId: {point.Anchor.PointId}, " +
+                        $"Min: {point.MinStackHeight}, Max: {point.MaxStackHeight}. Fixed level iÃ§in min=max Ã¶nerilir.",
                         this);
                 }
 
@@ -1172,7 +1187,7 @@ namespace ZenMatch.Runtime
             if (tileCursor != generatedTiles.Count)
             {
                 Debug.LogError(
-                    $"[BoardSpawner] Generated tile sayýsý ile atanan tile sayýsý uyuþmadý. " +
+                    $"[BoardSpawner] Generated tile sayÄ±sÄ± ile atanan tile sayÄ±sÄ± uyuÅŸmadÄ±. " +
                     $"AssignedCursor: {tileCursor}, GeneratedCount: {generatedTiles.Count}",
                     this);
             }
@@ -1298,18 +1313,124 @@ namespace ZenMatch.Runtime
 
             BoardStackView view = stackGo.AddComponent<BoardStackView>();
             view.Bind(stack);
+
+
+
+            float dimFactor = CalculateStackDimFactor(stack);
+
             view.Configure(
-                verticalStackOffsetStep,
-                horizontalStackOffsetStep,
-                hiddenBackSprite,
-                sortingLayerName,
-                baseSortingOrder + (renderPriority * sortingOrderStepPerRenderPriority),
-                1);
+    verticalStackOffsetStep,
+    horizontalStackOffsetStep,
+    hiddenBackSprite,
+    sortingLayerName,
+    baseSortingOrder + (renderPriority * sortingOrderStepPerRenderPriority),
+    1,
+    dimFactor);
+
+            view.ConfigureSelectableGlow(
+    selectableGlowSprite,
+    selectableGlowColor,
+    selectableGlowScale,
+    selectableGlowSortingOffset,
+    showGlowOnExposedLine);
 
             view.Rebuild();
 
             _runtimeViews.Add(view);
+            _viewByPointId[stack.PointId] = view;
+
             return view;
+        }
+
+
+
+        private float CalculateStackDimFactor(BoardStack targetStack)
+        {
+            if (targetStack == null)
+                return 0f;
+
+            if (!targetStack.IsLocked)
+                return 0f;
+
+            if (targetStack.VisibilityMode == StackVisibilityMode.Hidden)
+                return 0f;
+
+            List<BoardStack> lockedStacks = new();
+
+            for (int i = 0; i < _runtimeStacks.Count; i++)
+            {
+                BoardStack stack = _runtimeStacks[i];
+
+                if (stack == null)
+                    continue;
+
+                if (!stack.IsLocked)
+                    continue;
+
+                if (stack.VisibilityMode == StackVisibilityMode.Hidden)
+                    continue;
+
+                lockedStacks.Add(stack);
+            }
+
+            lockedStacks.Sort((a, b) =>
+            {
+                int aPriority = a.Anchor != null ? a.Anchor.RenderPriority : 0;
+                int bPriority = b.Anchor != null ? b.Anchor.RenderPriority : 0;
+
+                return bPriority.CompareTo(aPriority);
+            });
+
+            int rank = lockedStacks.IndexOf(targetStack);
+
+            if (rank < 0)
+                return 0f;
+
+            rank = Mathf.Clamp(rank, 0, 3);
+
+            return rank switch
+            {
+                0 => lockedStackDimRank1,
+                1 => lockedStackDimRank2,
+                2 => lockedStackDimRank3,
+                _ => lockedStackDimRank4
+            };
+        }
+
+        
+
+        private void RefreshAllStackDims()
+        {
+            for (int i = 0; i < _runtimeStacks.Count; i++)
+            {
+                var stack = _runtimeStacks[i];
+
+                if (stack == null)
+                    continue;
+
+                if (!_viewByPointId.TryGetValue(stack.PointId, out var view))
+                    continue;
+
+                float dim = CalculateStackDimFactor(stack);
+                view.SetStackDimFactor(dim);
+            }
+        }
+
+        private int GetMaxRenderPriority()
+        {
+            int max = int.MinValue;
+
+            for (int i = 0; i < _runtimeStacks.Count; i++)
+            {
+                if (_runtimeStacks[i] == null)
+                    continue;
+
+                int priority = _runtimeStacks[i].Anchor.RenderPriority;
+                if (priority > max)
+                    max = priority;
+            }
+
+            return max == int.MinValue ? 0 : max;
         }
 
         private void EnsureStacksRoot()

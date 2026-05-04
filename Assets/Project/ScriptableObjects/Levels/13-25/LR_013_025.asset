@@ -21,7 +21,13 @@ MonoBehaviour:
   maxTotalTiles: 45
   allowedNormalLayouts:
   - layout: {fileID: 11400000, guid: b3bbced42f24eb346b20672fb9f72ca5, type: 2}
-    weight: 5
+    weight: 1
   - layout: {fileID: 11400000, guid: a94b17f490eaa664d93482e3dc97f73c, type: 2}
     weight: 1
-  allowedSpecialLayouts: []
+  - layout: {fileID: 11400000, guid: fb96fb9cdde9b1a4ebc4c87dd4803953, type: 2}
+    weight: 1
+  - layout: {fileID: 11400000, guid: 4f11006cad163044dbc06aeefa64c77e, type: 2}
+    weight: 1
+  allowedSpecialLayouts:
+  - layout: {fileID: 11400000, guid: a38e1e5572a6a3347ad728185239a2b4, type: 2}
+    weight: 2
